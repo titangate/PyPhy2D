@@ -1,4 +1,5 @@
 from vector2d import Vector2D
+import copy
 
 class Body(object):
     def __init__(self, bodyType, position):
@@ -30,21 +31,14 @@ class Sphere(Body):
     def collide(self, other):
         if other.__class__ == Sphere:
             dp = other.position - self.position
-            return dp.magsqr() < (self.radius + other.radius) ** 2
+            contactTime = dp.magsqr() / (self.radius + other.radius) ** 2
+            return contactTime
 
 class AABBTree(object):
     def __init__(self):
         self.objects = {}
         self.staticObjects = {}
         self.initCount = 0
-
-    def copy(self):
-        copied = AABBTree()
-        copied.objects = self.objects.copy()
-        copied.staticObjects = self.staticObjects.copy()
-        copied.initCount = self.initCount
-        return copied
-
     def addObject(self, obj):
         self.initCount += 1
         if obj.bodyType == 'static':
@@ -63,19 +57,21 @@ class AABBTree(object):
         for k,obj in self.objects.iteritems():
             obj.applyLinearForce(gravity)
             obj.evolve(dt)
+            obj.acceleration = Vector2D(0,0)
 
     def getStaticCollisions(self):
         collisions = []
-        for k,obj in self.objects.iteritems():
-            for _,staticOther in self.staticObjects.iteritems():
-                if obj.collide(staticOther):
-                    collisions.append([obj, staticOther])
+        for tagA,obj in self.objects.iteritems():
+            for tagB,staticOther in self.staticObjects.iteritems():
+                contactTime = obj.collide(staticOther)
+                if contactTime <= 1:
+                    collisions.append([tagA, tagB, contactTime])
         return collisions
 
 class World(object):
     def __init__(self):
         self.bodies = AABBTree()
-        self.gravity = Vector2D(0,1)
+        self.gravity = Vector2D(0,10)
 
     def addBody(self, body):
         return self.bodies.addObject(body)
@@ -84,14 +80,22 @@ class World(object):
         return self.bodies.getBody(tag=tag)
 
     def update(self, dt):
-        evolved = self.bodies.copy()
+        evolved = copy.deepcopy(self.bodies)
         evolved.evolve(dt, self.gravity)
 
         collisions = evolved.getStaticCollisions()
-        for a, b in collisions:
+        for tagA, tagB, contactTime in collisions:
+            prevA = self.bodies.getBody(tagA)
+            prevB = self.bodies.getBody(tagB)
+            a = evolved.getBody(tagA)
+            b = evolved.getBody(tagB)
             normal = (b.position - a.position).norm()
             colPlane = Vector2D(-normal.y, normal.x)
             nVer = a.velocity.dot(normal)
             nCol = a.velocity.dot(colPlane)
-            a.velocity = colPlane * nCol - normal * nVer
+            postVelocity = colPlane * nCol - normal * nVer
+            dv = (a.velocity * contactTime + postVelocity * (1 - contactTime)) * dt
+            a.position = prevA.position + dv
+            a.velocity = postVelocity
+
         self.bodies = evolved

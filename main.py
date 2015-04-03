@@ -3,6 +3,7 @@ from world import Sphere, World
 from vector2d import Vector2D
 import cProfile, pstats, StringIO
 import random
+import time
 pygame.init()
 
 size = width, height = 800,600
@@ -47,10 +48,13 @@ while 1:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             exitSim()
-    ms = clock.tick(60) / 1000.0
+        if event.type == pygame.KEYDOWN:
+            pass
+    ms = clock.tick(60) / 1000.
     world.update(ms)
     print 'dt:' + str(ms)
     screen.fill(black)
     for circle in circles:
         circle.render()
+        #print world.getBody(tag=circle.bodyTag).position
     pygame.display.flip()
